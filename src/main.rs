@@ -1,102 +1,102 @@
-use bevy::prelude::*;
+use nannou::prelude::*;
 
-const G: f32 = 1.0;
+const TIME_STEP: f32 = 0.01;
 
-const MASSES: [f32; 3] = [1.0, 1.0, 1.0];
-const INITIAL_POSITIONS: [Vec2; 3] = [
-    Vec2::new(-0.97000436, 0.24308753),
-    Vec2::new(0.97000436, -0.24308753),
-    Vec2::new(0.0, 0.0),
-];
-const INITIAL_VELOCITIES: [Vec2; 3] = [
-    Vec2::new(0.466203685, 0.43236573),
-    Vec2::new(0.466203685, 0.43236573),
-    Vec2::new(-0.93240737, -0.86473146),
-];
+const SIZE: f32 = 500.0;
 
-const SCALE: f32 = 300.0;
-
-#[derive(Component, Clone)]
+#[derive(Clone, Copy, Debug)]
 struct Body {
+    pos: Vec2,
+    vel: Vec2,
+    acc: Vec2,
     mass: f32,
-    position: Vec2,
-    velocity: Vec2,
+    color: Rgb<u8>,
 }
 
-fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Three Body Problem".to_string(),
-                resolution: (800., 800.).into(),
-                ..default()
-            }),
-            ..default()
-        }))
-        .add_systems(Startup, setup)
-        .add_systems(Update, update_bodies)
-        .run();
-}
-
-fn setup(mut commands: Commands) {
-    commands.spawn(Camera2d);
-
-    for (i, &mass) in MASSES.iter().enumerate() {
-        let position = INITIAL_POSITIONS[i] * SCALE;
-        let velocity = INITIAL_VELOCITIES[i] * SCALE;
-
-        commands.spawn((
-            SpriteBundle {
-                image: Sprite {
-                    color: Color::hsl(i as f32 * 120.0, 0.8, 0.5),
-                    custom_size: Some(Vec2::splat(20.0)),
-                    ..default()
-                },
-                transform: Transform::from_xyz(position.x, position.y, 0.0),
-                ..default()
-            },
-            Body {
-                mass,
-                position,
-                velocity,
-            },
-        ));
-    }
-}
-
-fn update_bodies(
-    time: Res<Time>,
-    mut query: Query<(&mut Body, &mut Transform)>,
-) {
-    let dt = time.delta_seconds();
-    let mut bodies: Vec<(Mut<Body>, Mut<Transform>)> = query.iter_mut().collect();
-    let snapshots: Vec<Body> = bodies.iter().map(|(b, _)| b.clone()).collect();
-    let accels = calc_accelerations(&snapshots);
-
-    for ((body, transform), accel) in bodies.iter_mut().zip(accels.iter()) {
-        // Symplectic Euler integration
-        body.velocity += *accel * dt;
-        body.position += body.velocity * dt;
-
-        transform.translation = Vec3::new(body.position.x, body.position.y, 0.0);
-    }
-}
-
-fn calc_accelerations(bodies: &[Body]) -> Vec<Vec2> {
-    let mut accelerations = vec![Vec2::ZERO; bodies.len()];
-
-    for i in 0..bodies.len() {
-        for j in 0..bodies.len() {
-            if i == j {
-                continue;
-            }
-
-            let dir = bodies[j].position - bodies[i].position;
-            let dist_sq = dir.length_squared().max(1e-5); // avoid singularity
-            let force_mag = G * bodies[j].mass / dist_sq;
-            accelerations[i] += dir.normalize() * force_mag;
+impl Body {
+    fn new(pos: Vec2, vel: Vec2, mass: f32, color: Rgb<u8>) -> Self {
+        Self {
+            pos,
+            vel,
+            acc: Vec2::ZERO,
+            mass,
+            color,
         }
     }
 
-    accelerations
+    fn apply_force(&mut self, force: Vec2) {
+        self.acc += force / self.mass;
+    }
+
+    fn update(&mut self) {
+        self.vel += self.acc * TIME_STEP;
+        self.pos += self.vel * TIME_STEP;
+        self.acc = Vec2::ZERO;
+    }
+
+    fn draw(&self, draw: &Draw) {
+        draw.ellipse()
+            .x_y(self.pos.x as f32, self.pos.y as f32)
+            .w_h(20.0, 20.0)
+            .rgb(
+                self.color.red as f32 / 255.0,
+                self.color.green as f32 / 255.0,
+                self.color.blue as f32 / 255.0,
+            );
+    }
+}
+
+struct Model {
+    bodies: Vec<Body>,
+}
+
+fn model(_app: &App) -> Model {
+    let bodies = vec![
+        Body::new(vec2(0.97000436, -0.24308753)*SIZE, vec2(0.46620368, 0.43236573)*SIZE, 1.0, RED),
+        Body::new(vec2(-0.97000436, 0.24308753)*SIZE, vec2(0.46620368, 0.43236573)*SIZE, 1.0, GREEN),
+        Body::new(vec2(0.0, 0.0)*SIZE, vec2(-0.93240737, -0.86473146)*SIZE, 1.0, BLUE),
+    ];
+
+    Model { bodies }
+}
+
+fn update(_app: &App, model: &mut Model, _update: Update) {
+    let G: f32 = 1.0*SIZE.powi(3); // Gravitational constant
+    let mut forces = vec![vec2(0.0, 0.0); model.bodies.len()];
+
+    for i in 0..model.bodies.len() {
+        for j in 0..model.bodies.len() {
+            if i != j {
+                let dir = model.bodies[j].pos - model.bodies[i].pos;
+                let dist_sq = dir.length_squared().max(5.0);
+                let force_mag = G * model.bodies[i].mass * model.bodies[j].mass / dist_sq;
+                let force = dir.normalize() * force_mag;
+                forces[i] += force;
+            }
+        }
+    }
+
+    for (body, force) in model.bodies.iter_mut().zip(forces.iter()) {
+        body.apply_force(*force);
+        body.update();
+    }
+}
+
+fn view(app: &App, model: &Model, frame: Frame) {
+    let draw = app.draw();
+    if frame.nth() == 0 {
+        draw.background().color(BLACK);
+    } else {
+        draw.rect().w_h(800.0, 800.0).color(srgba(0.0, 0.0, 0.0, 0.05));
+    }
+
+    for body in &model.bodies {
+        body.draw(&draw);
+    }
+
+    draw.to_frame(app, &frame).unwrap();
+}
+
+fn main() {
+    nannou::app(model).update(update).simple_window(view).run();
 }
