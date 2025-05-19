@@ -2023,6 +2023,7 @@ dependencies = [
 name = "tbp_sim"
 version = "0.1.0"
 dependencies = [
+ "lazy_static",
  "nannou",
 ]
 
