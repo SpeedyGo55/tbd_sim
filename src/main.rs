@@ -86,9 +86,11 @@ impl Body {
     }
 
     fn draw(&self, draw: &Draw) {
+        let r = (self.mass / f32::PI()).sqrt();
+        let r = r * 20.0;
         draw.ellipse()
             .x_y(self.pos.x, self.pos.y)
-            .w_h(20.0, 20.0)
+            .w_h(r * 2.0 , r * 2.0)
             .rgb(
                 self.color.red as f32 / 255.0,
                 self.color.green as f32 / 255.0,
