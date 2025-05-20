@@ -1,4 +1,4 @@
-//#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 use lazy_static::lazy_static;
 use nannou::prelude::*;
