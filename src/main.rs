@@ -17,7 +17,6 @@ lazy_static! {
             .parent()
             .expect("Unable to get parent directory")
             .join("config.json");
-        println!("Loading bodies from: {:?}", path);
         let mut bodies = load_bodies_json(Box::new(path));
         for body in &mut bodies {
             body.pos = body.pos * SIZE;
@@ -37,20 +36,20 @@ fn load_bodies_json(filepath: Box<PathBuf>) -> Vec<Body> {
 fn save_bodies_json(filepath: Box<PathBuf>, bodies: &Vec<Body>) {
     if let Some(parent) = filepath.parent() {
         if let Err(e) = std::fs::create_dir_all(parent) {
-            println!("Failed to create directory: {}", e);
+            eprintln!("Failed to create directories: {}", e);
             return;
         }
     }
     let file = match std::fs::File::create(filepath.as_path()) {
         Ok(f) => f,
         Err(e) => {
-            println!("Unable to create file: {}", e);
+            eprintln!("Unable to create file: {}", e);
             return;
         }
     };
     let writer = std::io::BufWriter::new(file);
     if let Err(e) = serde_json::to_writer(writer, bodies) {
-        println!("Unable to write JSON: {}", e);
+        eprintln!("Unable to write JSON: {}", e);
     }
 }
 
@@ -160,7 +159,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             if !path.exists() {
                 if let Some(parent) = path.parent() {
                     std::fs::create_dir_all(parent).unwrap_or_else(|e| {
-                        println!("Failed to create directories: {}", e);
+                        eprintln!("Failed to create directories: {}", e);
                     });
                 }
             }
@@ -171,8 +170,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             }
 
             save_bodies_json(Box::new(path), &bodies);
-        } else {
-            println!("No file selected");
         }
     }
 
@@ -190,9 +187,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             }
             model.bodies = bodies.clone();
             model.initial_bodies = bodies.clone();
-        } else {
-            model.bodies = model.bodies.clone();
-            println!("No file selected");
         }
     }
 
