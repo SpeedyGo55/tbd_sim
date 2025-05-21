@@ -53,6 +53,13 @@ fn save_bodies_json(filepath: Box<PathBuf>, bodies: &Vec<Body>) {
     }
 }
 
+fn mix_colors(color1: Rgb<u8>, color2: Rgb<u8>) -> Rgb<u8> {
+    let r = (color1.red as f32 + color2.red as f32) / 2.0;
+    let g = (color1.green as f32 + color2.green as f32) / 2.0;
+    let b = (color1.blue as f32 + color2.blue as f32) / 2.0;
+    Rgb::new(r as u8, g as u8, b as u8)
+}
+
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct Body {
@@ -193,17 +200,43 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     if model.running {
         let G: f32 = 1.0 * SIZE.powi(3); // Gravitational constant
         let mut forces = vec![vec2(0.0, 0.0); model.bodies.len()];
+        let mut bodies_to_remove: Vec<usize> = vec![];
 
         for i in 0..model.bodies.len() {
             for j in 0..model.bodies.len() {
                 if i != j {
-                    let dir = model.bodies[j].pos - model.bodies[i].pos;
-                    let dist_sq = dir.length_squared().max(5.0);
-                    let force_mag = G * model.bodies[i].mass * model.bodies[j].mass / dist_sq;
-                    let force = dir.normalize() * force_mag;
-                    forces[i] += force;
+                    // Collision detection
+                    let dist = model.bodies[i].pos.distance(model.bodies[j].pos);
+                    let radii_sum = (model.bodies[i].mass / f32::PI()).sqrt() * 20.0 + (model.bodies[j].mass / f32::PI()).sqrt() * 20.0;
+                    if dist < radii_sum {
+                        // Handle collision as if they are planets (they will merge)
+                        let new_mass = model.bodies[i].mass + model.bodies[j].mass;
+                        let new_pos = (model.bodies[i].pos * model.bodies[i].mass + model.bodies[j].pos * model.bodies[j].mass) / new_mass;
+                        let new_vel = (model.bodies[i].vel * model.bodies[i].mass + model.bodies[j].vel * model.bodies[j].mass) / new_mass;
+                        model.bodies[i].pos = new_pos;
+                        model.bodies[i].vel = new_vel;
+                        model.bodies[i].mass = new_mass;
+                        model.bodies[i].color = mix_colors(model.bodies[i].color, model.bodies[j].color);
+                        model.bodies[j].mass = 0.0;
+                        model.bodies[j].pos = Vec2::ZERO;
+                        model.bodies[j].vel = Vec2::ZERO;
+                        model.bodies[j].color = Rgb::new(0, 0, 0);
+                        model.bodies[j].acc = Vec2::ZERO;
+                        bodies_to_remove.push(j);
+                        } else {
+
+                        let dir = model.bodies[j].pos - model.bodies[i].pos;
+                        let dist_sq = dir.length_squared().max(5.0);
+                        let force_mag = G * model.bodies[i].mass * model.bodies[j].mass / dist_sq;
+                        let force = dir.normalize() * force_mag;
+                        forces[i] += force;
+                    }
                 }
             }
+        }
+        for i in bodies_to_remove.iter() {
+            model.bodies.remove(*i);
+            model.selected_body = None;
         }
 
         for (body, force) in model.bodies.iter_mut().zip(forces.iter()) {
