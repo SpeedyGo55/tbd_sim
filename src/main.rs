@@ -53,7 +53,6 @@ fn save_bodies_json(filepath: Box<PathBuf>, bodies: &Vec<Body>) {
     }
 }
 
-
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct Body {
     pos: Vec2,
@@ -124,11 +123,10 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         model.space_down = false;
     }
 
-    // on keypress 'r' reset the bodies
     if app.keys.down.contains(&Key::R) {
         model.bodies = model.initial_bodies.clone();
     }
-    // if mouse is pressed and on a body drag it
+
     if app.mouse.buttons.left().is_down() {
         match model.selected_body {
             Some(index) => {
@@ -139,7 +137,7 @@ fn update(app: &App, model: &mut Model, _update: Update) {
             None => {
                 for (i, body) in model.bodies.iter_mut().enumerate() {
                     let r = (body.mass / f32::PI()).sqrt() * 20.0;
-                    if body.pos.distance(app.mouse.position()) < r {
+                    if body.pos.distance(app.mouse.position()) < r + 1.0 {
                         model.selected_body = Some(i);
                         break;
                     }
@@ -150,7 +148,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         model.selected_body = None;
     }
 
-    // if 's' is pressed save the body
     if app.keys.down.contains(&Key::S) {
         if let Some(path) = FileDialog::new()
             .set_title("Save Body")
@@ -174,7 +171,6 @@ fn update(app: &App, model: &mut Model, _update: Update) {
         }
     }
 
-    // if 'l' is pressed load the body
     if app.keys.down.contains(&Key::L) {
         if let Some(path) = FileDialog::new()
             .set_title("Load Body")
@@ -192,32 +188,20 @@ fn update(app: &App, model: &mut Model, _update: Update) {
     }
 
     if model.running {
-        let G: f32 = 1.0 * SIZE.powi(3); // Gravitational constant
+        let G: f32 = 1.0 * SIZE.powi(3);
         let mut forces = vec![vec2(0.0, 0.0); model.bodies.len()];
 
         for i in 0..model.bodies.len() {
-            for j in 0..model.bodies.len() {
-                if i != j {
-                    // Collision detection
-                    let dist = model.bodies[i].pos.distance(model.bodies[j].pos);
-                    let radii_sum = (model.bodies[i].mass / f32::PI()).sqrt() * 20.0 + (model.bodies[j].mass / f32::PI()).sqrt() * 20.0;
-                    if dist < radii_sum {
-                        // Collision response (just set the bodies so they are not overlapping)
-                        let overlap = radii_sum - dist;
-                        let dir = (model.bodies[j].pos - model.bodies[i].pos).normalize();
-                        model.bodies[i].pos -= dir * overlap / 2.0;
-                        model.bodies[j].pos += dir * overlap / 2.0;
-                    }
-
-                    let dir = model.bodies[j].pos - model.bodies[i].pos;
-                    let dist_sq = dir.length_squared().max(5.0);
-                    let force_mag = G * model.bodies[i].mass * model.bodies[j].mass / dist_sq;
-                    let force = dir.normalize() * force_mag;
-                    forces[i] += force;
-
-                }
+            for j in (i + 1)..model.bodies.len() {
+                let dir = model.bodies[j].pos - model.bodies[i].pos;
+                let dist_sq = dir.length_squared().max(5.0);
+                let force_mag = G * model.bodies[i].mass * model.bodies[j].mass / dist_sq;
+                let force = dir.normalize() * force_mag;
+                forces[i] += force;
+                forces[j] -= force;
             }
         }
+
         for (body, force) in model.bodies.iter_mut().zip(forces.iter()) {
             body.apply_force(*force);
             body.update();
